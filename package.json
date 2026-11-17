@@ -1,0 +1,22 @@
+{
+  "name": "climagrid-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ClimaGrid — PWA dashboard cuaca & iklim Jawa Timur (demo Sistem Terdistribusi 2026)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "serve": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "pwa",
+    "weather",
+    "dashboard",
+    "climagrid",
+    "jawa-timur"
+  ],
+  "license": "MIT"
+}

@@ -1,0 +1,63 @@
+/* ClimaGrid — data stasiun & konfigurasi tampilan (simulasi) */
+
+const STATIONS = [
+  { id: 'SBY-01', name: 'Surabaya — Sukolilo', area: 'Surabaya', kab: 'Kota Surabaya', lat: -7.281, lon: 112.795, elev: 12, status: 'online', type: 'kota', operator: 'BMKG Jatim', installed: '2023-04-12', sensors: 'Suhu · RH · Tekanan · Hujan', tempBase: 33.4, rhBase: 62, rainBase: 0, windBase: 14 },
+  { id: 'SBY-02', name: 'Surabaya — Benowo', area: 'Surabaya', kab: 'Kota Surabaya', lat: -7.237, lon: 112.635, elev: 8, status: 'online', type: 'kota', operator: 'BMKG Jatim', installed: '2023-06-02', sensors: 'Suhu · RH · Tekanan · Hujan', tempBase: 32.8, rhBase: 64, rainBase: 0, windBase: 16 },
+  { id: 'SDA-01', name: 'Sidoarjo — Buduran', area: 'Sidoarjo', kab: 'Kab. Sidoarjo', lat: -7.447, lon: 112.718, elev: 8, status: 'online', type: 'kota', operator: 'Dinas Pertanian', installed: '2023-08-19', sensors: 'Suhu · RH · Hujan', tempBase: 32.6, rhBase: 63, rainBase: 0, windBase: 12 },
+  { id: 'GRK-01', name: 'Gresik — Manyar', area: 'Gresik', kab: 'Kab. Gresik', lat: -7.156, lon: 112.653, elev: 20, status: 'online', type: 'pesisir', operator: 'BMKG Jatim', installed: '2024-01-15', sensors: 'Suhu · RH · Tekanan · Angin', tempBase: 32.2, rhBase: 65, rainBase: 0, windBase: 18 },
+  { id: 'MJK-01', name: 'Mojokerto — Trowulan', area: 'Mojokerto', kab: 'Kab. Mojokerto', lat: -7.470, lon: 112.430, elev: 25, status: 'online', type: 'kota', operator: 'Dinas Pertanian', installed: '2023-11-03', sensors: 'Suhu · RH · Hujan', tempBase: 31.8, rhBase: 66, rainBase: 0, windBase: 10 },
+  { id: 'PAS-01', name: 'Pasuruan — Grati', area: 'Pasuruan', kab: 'Kab. Pasuruan', lat: -7.646, lon: 112.907, elev: 10, status: 'online', type: 'pesisir', operator: 'BMKG Jatim', installed: '2024-02-21', sensors: 'Suhu · RH · Angin', tempBase: 31.5, rhBase: 68, rainBase: 0, windBase: 12 },
+  { id: 'PRO-01', name: 'Probolinggo — Kraksaan', area: 'Probolinggo', kab: 'Kab. Probolinggo', lat: -7.754, lon: 113.215, elev: 15, status: 'online', type: 'pesisir', operator: 'BMKG Jatim', installed: '2023-09-11', sensors: 'Suhu · RH · Tekanan · Angin', tempBase: 32.0, rhBase: 64, rainBase: 0, windBase: 20 },
+  { id: 'MLG-01', name: 'Malang — Karangploso', area: 'Malang', kab: 'Kab. Malang', lat: -7.966, lon: 112.633, elev: 445, status: 'online', type: 'pegunungan', operator: 'BRIN', installed: '2022-12-07', sensors: 'Suhu · RH · Tekanan · Hujan', tempBase: 27.6, rhBase: 74, rainBase: 0, windBase: 9 },
+  { id: 'BAT-01', name: 'Batu — Selecta', area: 'Batu', kab: 'Kota Batu', lat: -7.870, lon: 112.523, elev: 900, status: 'online', type: 'pegunungan', operator: 'BRIN', installed: '2022-10-30', sensors: 'Suhu · RH · Hujan', tempBase: 24.8, rhBase: 79, rainBase: 0.4, windBase: 7 },
+  { id: 'KDR-01', name: 'Kediri — Pare', area: 'Kediri', kab: 'Kab. Kediri', lat: -7.816, lon: 112.017, elev: 70, status: 'online', type: 'kota', operator: 'Dinas Pertanian', installed: '2023-05-18', sensors: 'Suhu · RH · Hujan', tempBase: 30.9, rhBase: 68, rainBase: 0, windBase: 8 },
+  { id: 'BLT-01', name: 'Blitar — Wlingi', area: 'Blitar', kab: 'Kab. Blitar', lat: -8.095, lon: 112.161, elev: 167, status: 'online', type: 'pegunungan', operator: 'Dinas Pertanian', installed: '2023-07-25', sensors: 'Suhu · RH · Hujan', tempBase: 29.7, rhBase: 72, rainBase: 0, windBase: 9 },
+  { id: 'JBR-01', name: 'Jember — Sukorambi', area: 'Jember', kab: 'Kab. Jember', lat: -8.184, lon: 113.668, elev: 90, status: 'online', type: 'kota', operator: 'Dinas Pertanian', installed: '2023-03-14', sensors: 'Suhu · RH · Tekanan · Hujan', tempBase: 30.6, rhBase: 70, rainBase: 1.5, windBase: 10 },
+  { id: 'BWY-01', name: 'Banyuwangi — Rogojampi', area: 'Banyuwangi', kab: 'Kab. Banyuwangi', lat: -8.219, lon: 114.369, elev: 45, status: 'online', type: 'kota', operator: 'BMKG Jatim', installed: '2023-02-09', sensors: 'Suhu · RH · Tekanan · Hujan', tempBase: 31.2, rhBase: 76, rainBase: 52, windBase: 13 },
+  { id: 'MDN-01', name: 'Madiun — Jiwan', area: 'Madiun', kab: 'Kab. Madiun', lat: -7.629, lon: 111.523, elev: 65, status: 'online', type: 'kota', operator: 'Dinas Pertanian', installed: '2023-10-12', sensors: 'Suhu · RH · Hujan', tempBase: 31.0, rhBase: 66, rainBase: 0, windBase: 9 },
+  { id: 'NGW-01', name: 'Ngawi — Geneng', area: 'Ngawi', kab: 'Kab. Ngawi', lat: -7.410, lon: 111.446, elev: 60, status: 'online', type: 'kota', operator: 'Dinas Pertanian', installed: '2024-01-08', sensors: 'Suhu · RH · Hujan', tempBase: 31.3, rhBase: 64, rainBase: 0, windBase: 8 },
+  { id: 'TBN-01', name: 'Tuban — Jenu', area: 'Tuban', kab: 'Kab. Tuban', lat: -6.897, lon: 112.065, elev: 12, status: 'online', type: 'pesisir', operator: 'BMKG Jatim', installed: '2023-12-01', sensors: 'Suhu · RH · Tekanan · Angin', tempBase: 32.4, rhBase: 39, rainBase: 0, windBase: 19 },
+  { id: 'LMJ-01', name: 'Lumajang — Senduro', area: 'Lumajang', kab: 'Kab. Lumajang', lat: -8.134, lon: 113.225, elev: 120, status: 'online', type: 'pegunungan', operator: 'BRIN', installed: '2023-08-04', sensors: 'Suhu · RH · Hujan', tempBase: 29.6, rhBase: 73, rainBase: 6, windBase: 11 },
+  { id: 'SMP-01', name: 'Sumenep — Kalianget', area: 'Sumenep', kab: 'Kab. Sumenep', lat: -7.005, lon: 113.856, elev: 20, status: 'online', type: 'pulau', operator: 'BMKG Jatim', installed: '2024-03-19', sensors: 'Suhu · RH · Angin', tempBase: 31.4, rhBase: 69, rainBase: 0, windBase: 43 },
+  { id: 'BKL-01', name: 'Bangkalan — Kamal', area: 'Bangkalan', kab: 'Kab. Bangkalan', lat: -7.046, lon: 112.735, elev: 40, status: 'online', type: 'pulau', operator: 'BMKG Jatim', installed: '2024-02-02', sensors: 'Suhu · RH · Tekanan · Hujan', tempBase: 31.9, rhBase: 67, rainBase: 0, windBase: 21 },
+  { id: 'PKT-01', name: 'Pacitan — Ngadirojo', area: 'Pacitan', kab: 'Kab. Pacitan', lat: -8.194, lon: 111.103, elev: 30, status: 'offline', type: 'pesisir', operator: 'BMKG Jatim', installed: '2023-06-27', sensors: 'Suhu · RH · Hujan', tempBase: 29.2, rhBase: 78, rainBase: 2, windBase: 12 }
+];
+
+const CITY_LABELS = [
+  { name: 'Surabaya', lat: -7.245, lon: 112.75, dy: -24 },
+  { name: 'Malang', lat: -7.98, lon: 112.63, dy: 20 },
+  { name: 'Madiun', lat: -7.63, lon: 111.52, dy: 19 },
+  { name: 'Kediri', lat: -7.82, lon: 112.02, dy: -14 },
+  { name: 'Jember', lat: -8.17, lon: 113.70, dy: 20 },
+  { name: 'Banyuwangi', lat: -8.22, lon: 114.37, dy: 20, dx: -26 },
+  { name: 'Probolinggo', lat: -7.75, lon: 113.22, dy: -14 },
+  { name: 'Sumenep', lat: -7.01, lon: 113.86, dy: -14 },
+  { name: 'Pacitan', lat: -8.19, lon: 111.10, dy: 20, dx: 22 },
+  { name: 'Tuban', lat: -6.90, lon: 112.06, dy: -14 }
+];
+
+const VARIABLES = {
+  temp: {
+    label: 'Suhu', short: 'Suhu', unit: '°C', icon: 'i-temp', domain: [22, 38], decimals: 1,
+    stops: [[0, '#3E7FA8'], [0.28, '#5FD3C4'], [0.5, '#F2E3B6'], [0.72, '#F2B13A'], [1, '#B23A2B']]
+  },
+  rain: {
+    label: 'Curah hujan', short: 'Hujan', unit: 'mm/jam', icon: 'i-rain', domain: [0, 60], decimals: 0,
+    stops: [[0, '#DCEDEA'], [0.18, '#A9D8D0'], [0.42, '#5FB7B0'], [0.7, '#1F7A8C'], [1, '#0B4F6C']]
+  },
+  rh: {
+    label: 'Kelembapan', short: 'RH', unit: '%', icon: 'i-humidity', domain: [30, 95], decimals: 0,
+    stops: [[0, '#D9A36A'], [0.22, '#F2D9A8'], [0.48, '#DCEDEA'], [0.75, '#7FC8BC'], [1, '#2E7D74']]
+  }
+};
+
+const ALERT_RULES = {
+  heat: { label: 'Suhu ekstrem', variable: 'temp', high: 35, medium: 34.5, icon: 'i-temp',
+    advice: 'Batasi aktivitas luar ruang pukul 11.00–15.00 dan penuhi kebutuhan cairan.' },
+  rain: { label: 'Hujan lebat', variable: 'rain', high: 40, medium: 20, icon: 'i-rain',
+    advice: 'Tunda operasi lapangan; periksa saluran drainase dan titik rawan genangan.' },
+  dry: { label: 'Udara kering', variable: 'rh', high: 35, medium: 42, icon: 'i-humidity', inverse: true,
+    advice: 'Tingkatkan irigasi dan pantau risiko kebakaran lahan serta debu.' },
+  wind: { label: 'Angin kencang', variable: 'wind', high: 40, medium: 30, icon: 'i-wind',
+    advice: 'Amankan peralatan sensor dan tunda operasi pesisir atau pelayaran kecil.' }
+};
