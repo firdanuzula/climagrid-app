@@ -1,0 +1,68 @@
+syntax = "proto3";
+package climagrid.v1;
+
+message Reading {
+  string station_id = 1;
+  string timestamp = 2;
+  fixed32 timestamp_unix = 3;
+  float temp = 4;
+  float rh = 5;
+  float rain = 6;
+  float wind = 7;
+  fixed64 payload_sha256_hi = 8;
+  fixed64 payload_sha256_lo = 9;
+}
+
+message ReadingBatch {
+  string batch_id = 1;
+  repeated Reading readings = 2;
+  fixed32 checksum_crc32 = 3;
+  bool resend = 4;
+}
+
+message IngestReply {
+  string batch_id = 1;
+  uint32 accepted = 2;
+  uint32 duplicates = 3;
+}
+
+message ReadingsQuery {
+  string station_id = 1;
+  string from = 2;
+  string to = 3;
+}
+
+message ReadingsReply {
+  repeated Reading readings = 1;
+}
+
+message JobRequest {
+  string idempotency_key = 1;
+  string type = 2;
+  string variable = 3;
+  sint32 time_offset = 4;
+}
+
+message JobReply {
+  string job_id = 1;
+  string status = 2;
+  uint32 progress = 3;
+  string result_sha256 = 4;
+}
+
+service WeatherService {
+  rpc IngestBatch(ReadingBatch) returns (IngestReply);
+  rpc GetReadings(ReadingsQuery) returns (ReadingsReply);
+}
+
+service JobService {
+  rpc SubmitJob(JobRequest) returns (JobReply);
+}
+
+service ResultService {
+  rpc Store(JobReply) returns (IngestReply);
+}
+
+service AlertService {
+  rpc Publish(ReadingBatch) returns (IngestReply);
+}

@@ -189,6 +189,43 @@ Seluruh path di proyek bersifat relatif, sehingga tetap berjalan di subpath
 GitHub Pages. Alternatif lain: Netlify, Vercel, atau Cloudflare Pages dengan
 *base directory* di folder ini dan tanpa build command.
 
+## REST API backend lokal
+
+Server statis kini juga menjalankan delapan endpoint PRD di `/api/v1`.
+Data stasiun berasal dari `data/stations.json`, sedangkan pembacaan dan job
+disimpan persisten pada `data/backend-state.json`. Endpoint mendukung validasi,
+token Bearer opsional, rate limit, ETag, Conditional GET, dan idempotency key.
+
+```text
+GET  /api/v1/stations
+GET  /api/v1/stations/{station_id}/readings
+POST /api/v1/stations/{station_id}/readings
+POST /api/v1/analytics/jobs
+GET  /api/v1/analytics/jobs/{job_id}
+GET  /api/v1/maps/{variable}?time=
+GET  /api/v1/alerts?wilayah=
+DELETE /api/v1/analytics/jobs/{job_id}
+GET  /api/v1/health
+```
+
+Untuk mengaktifkan autentikasi:
+
+```powershell
+$env:CLIMAGRID_TOKEN="ganti-dengan-token-rahasia"
+node server.js
+```
+
+Jalankan pengujian API:
+
+```powershell
+node tests/api.test.js
+```
+
+Catatan implementasi: ini adalah backend lokal JavaScript yang dapat dijalankan
+tanpa dependensi. Bukan pengganti PostgreSQL/TimescaleDB, Redis 7, gRPC Go, atau
+cluster MPI produksi. Skema SQL dan IDL Proto tersedia sebagai bukti/kerangka
+implementasi, sedangkan status akhirnya harus dinilai per bukti aktual.
+
 ## Pengujian
 
 Checklist yang sudah diverifikasi pada Chrome:

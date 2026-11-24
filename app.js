@@ -844,6 +844,44 @@ function updateOnline() {
 window.addEventListener('online', updateOnline);
 window.addEventListener('offline', updateOnline);
 
+async function syncFromBackend() {
+  try {
+    const [stationResponse, healthResponse] = await Promise.all([
+      fetch('/api/v1/stations', { headers: { Accept: 'application/json' } }),
+      fetch('/api/v1/health', { headers: { Accept: 'application/json' } })
+    ]);
+    if (!stationResponse.ok || !healthResponse.ok) throw new Error('Backend unavailable');
+    const stationData = await stationResponse.json();
+    const health = await healthResponse.json();
+    if (!Array.isArray(stationData.stations)) throw new Error('Invalid station response');
+
+    const localById = new Map(STATIONS.map(s => [s.id, s]));
+    const merged = stationData.stations.map(s => {
+      const local = localById.get(s.id);
+      return local ? { ...local, ...s } : s;
+    });
+    STATIONS.splice(0, STATIONS.length, ...merged);
+    const now = new Date();
+    STATIONS.forEach(s => {
+      s._seed = hashStr(s.id);
+      s.history = buildHistory(s, now);
+    });
+    refreshCurrent();
+    state.alerts = buildAlerts();
+    render();
+
+    const sideStatus = $('.side-status-head');
+    if (sideStatus) sideStatus.innerHTML = '<span class="pulse-dot"></span><span>Backend terhubung</span>';
+    const sideText = $('.side-status p');
+    if (sideText) sideText.innerHTML = `${health.dht.length} node Chord · RF=3<br>${STATIONS.filter(s => s.status === 'online').length} dari ${STATIONS.length} stasiun online`;
+    showToast('Data dimuat dari API backend');
+  } catch (_) {
+    const sideStatus = $('.side-status-head');
+    if (sideStatus) sideStatus.innerHTML = '<span class="pulse-dot" style="background:#B23A2B"></span><span>Backend tidak tersedia</span>';
+    showToast('Backend tidak tersedia — PWA menampilkan data cache');
+  }
+}
+
 /* PWA install */
 let deferredPrompt = null;
 const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -886,3 +924,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 initClock();
 updateOnline();
 route();
+syncFromBackend();

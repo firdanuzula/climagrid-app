@@ -1,0 +1,54 @@
+{
+  "readings": {
+    "SBY-01": [
+      {
+        "station_id": "SBY-01",
+        "timestamp": "2026-11-24T03:00:00.000Z",
+        "temp": 30.5,
+        "rh": 70,
+        "rain": 1.2,
+        "wind": 12,
+        "payload_sha256": "a7830b349e55c3451bb2aa7f1d28e8fd85049de8683fca9b78257032d4d1473a"
+      }
+    ]
+  },
+  "batches": {
+    "test-batch-1": {
+      "station_id": "SBY-01",
+      "timestamp": "2026-11-24T03:00:00.000Z",
+      "temp": 30.5,
+      "rh": 70,
+      "rain": 1.2,
+      "wind": 12,
+      "payload_sha256": "a7830b349e55c3451bb2aa7f1d28e8fd85049de8683fca9b78257032d4d1473a"
+    }
+  },
+  "jobs": {
+    "799e0be4-39c1-4a0d-872c-56616bd55846": {
+      "id": "799e0be4-39c1-4a0d-872c-56616bd55846",
+      "type": "idw",
+      "status": "completed",
+      "created_at": "2026-11-24T03:41:17.262Z",
+      "progress": 100,
+      "result": {
+        "width": 95,
+        "height": 56,
+        "values_sha256": "5c47b4f83f1b47a7921a9c37d8ee0f543fedbde4b28ab6f02d965f1948782fcb"
+      }
+    },
+    "test-job-1": {
+      "id": "799e0be4-39c1-4a0d-872c-56616bd55846",
+      "type": "idw",
+      "status": "completed",
+      "created_at": "2026-11-24T03:41:17.262Z",
+      "progress": 100,
+      "result": {
+        "width": 95,
+        "height": 56,
+        "values_sha256": "5c47b4f83f1b47a7921a9c37d8ee0f543fedbde4b28ab6f02d965f1948782fcb"
+      }
+    }
+  },
+  "duplicateCount": 4,
+  "ingestedCount": 1
+}
