@@ -18,17 +18,18 @@
 
 ## Tentang
 
-**ClimaGrid** adalah purwarupa antarmuka untuk sistem pemantauan cuaca dan iklim
+**ClimaGrid** adalah purwarupa lokal untuk sistem pemantauan cuaca dan iklim
 terdistribusi di Jawa Timur. Proyek ini dikembangkan dari PRD *ClimaGrid v1.0 —
-Sistem Terdistribusi 2026* dan berfokus pada tiga kebutuhan utama:
+Sistem Terdistribusi 2026* dan menyertakan PWA tanpa build step serta backend
+Node.js yang bisa dijalankan lokal:
 
 1. **Dashboard** ringkasan kondisi wilayah.
 2. **Peta interpolasi** sebaran suhu, hujan, dan kelembapan.
 3. **Peringatan dini** berbasis ambang batas per stasiun.
 
-Versi ini adalah **demo front-end tanpa backend**. Seluruh pembacaan sensor
-disimulasikan secara deterministik di browser, sehingga aplikasi bisa langsung
-dijalankan, dipasang sebagai PWA, dan didemokan tanpa database atau API.
+Tanpa backend, antarmuka menggunakan data simulasi dan menampilkan label
+**Mode simulasi**. Saat backend tersedia, peta, peringatan, pencarian stasiun,
+dan histori pembacaan diminta dari API.
 
 > Data pada demo ini **bukan data BMKG**. Nama stasiun, koordinat, dan nilai
 > pembacaan disusun untuk keperluan demonstrasi.
@@ -41,7 +42,8 @@ dijalankan, dipasang sebagai PWA, dan didemokan tanpa database atau API.
 | **Peta interpolasi** | Sebaran suhu/hujan/RH dengan *inverse distance weighting*, batas Jawa Timur, label kota, pilihan waktu, toggle interpolasi, legenda |
 | **Peringatan** | Deteksi suhu ekstrem, hujan lebat, udara kering, dan angin kencang; filter prioritas dan riwayat selesai |
 | **Stasiun** | 20 stasiun, pencarian, filter online/offline, sheet detail berisi grafik 24 jam dan atribut stasiun |
-| **Live simulation** | Nilai diperbarui tiap 5 detik, jam berjalan, tanpa perlu server data |
+| **Backend lokal** | REST, gRPC Node.js, antrean job, JSON persisten, DHT lokal, LRU/lease, dan serial fallback analytics |
+| **Mode simulasi** | Fallback deterministik dengan label eksplisit bila backend tidak terjangkau |
 | **PWA** | Manifest, ikon, service worker, dapat dipasang ke layar utama, dan tetap terbuka saat offline |
 | **Responsif** | Sidebar di desktop, tab bar bawah dan bottom sheet di ponsel |
 
@@ -65,13 +67,14 @@ dijalankan, dipasang sebagai PWA, dan didemokan tanpa database atau API.
 - [Node.js](https://nodejs.org) 18 atau lebih baru
 - Browser modern (Chrome, Edge, Firefox, Safari)
 
-Tidak ada dependensi npm dan tidak ada proses build.
+Dependensi backend dikelola dengan npm. Frontend tidak memerlukan proses build.
 
 ### Langkah
 
 ```bash
 git clone https://github.com/<username>/climagrid.git
 cd climagrid
+npm install
 node server.js
 ```
 
@@ -114,12 +117,17 @@ langsung berjalan dan browser terbuka otomatis.
 climagrid-app/
 ├─ index.html              # Shell PWA + ikon SVG sprite
 ├─ styles.css              # Design system dan layout responsif
-├─ app.js                  # Routing, chart, peta IDW, peringatan, live loop
+├─ app.js                  # Routing, peta API, peringatan, histori, fallback UI
 ├─ data.js                 # 20 stasiun, label kota, variabel, ambang batas
 ├─ map-data.js             # Poligon Jawa Timur hasil penyederhanaan
 ├─ manifest.webmanifest    # Metadata pemasangan PWA
 ├─ sw.js                   # Service worker (cache app shell)
-├─ server.js               # Server statis tanpa dependensi
+├─ server.js               # REST gateway dan server HTTP/HTTPS
+├─ backend/                # Gateway, ingest, master/worker, DHT, store, RPC/cache
+├─ analytics/              # MPI IDW dan statistik dengan fallback serial
+├─ proto/                  # Kontrak protobuf untuk gRPC Node.js
+├─ db/schema.sql           # Skema PostgreSQL/TimescaleDB (belum adapter aktif)
+├─ tests/                  # API, persistensi, DHT, RPC, cache, observability, load
 ├─ Jalankan ClimaGrid.bat  # Launcher Windows
 ├─ icons/                  # Ikon 192/512/maskable/apple/favicon
 ├─ assets/fonts/           # Inter 400/600/700/800
@@ -186,15 +194,18 @@ Karena aplikasi berupa berkas statis, GitHub Pages bisa dipakai langsung.
 4. Aplikasi tersedia di `https://<username>.github.io/climagrid/`.
 
 Seluruh path di proyek bersifat relatif, sehingga tetap berjalan di subpath
-GitHub Pages. Alternatif lain: Netlify, Vercel, atau Cloudflare Pages dengan
-*base directory* di folder ini dan tanpa build command.
+GitHub Pages. Hosting statis tidak menjalankan `server.js`; API tidak tersedia
+dan PWA menampilkan **Mode simulasi**. Untuk fitur backend, jalankan/deploy
+server Node.js. Alternatif hosting statis: Netlify, Vercel, atau Cloudflare
+Pages dengan *base directory* di folder ini dan tanpa build command.
 
 ## REST API backend lokal
 
-Server statis kini juga menjalankan delapan endpoint PRD di `/api/v1`.
-Data stasiun berasal dari `data/stations.json`, sedangkan pembacaan dan job
-disimpan persisten pada `data/backend-state.json`. Endpoint mendukung validasi,
-token Bearer opsional, rate limit, ETag, Conditional GET, dan idempotency key.
+Backend menyediakan API REST, transport gRPC Node.js lokal, antrean job, DHT
+Chord in-process, cache LRU, dan penyimpanan JSON persisten. Data stasiun berasal
+dari `data/stations.json`; state tersimpan pada `data/backend-state.json`.
+Endpoint API mendukung validasi, token Bearer opsional, rate limit, ETag,
+Conditional GET, dan idempotency key.
 
 ```text
 GET  /api/v1/stations
@@ -206,7 +217,13 @@ GET  /api/v1/maps/{variable}?time=
 GET  /api/v1/alerts?wilayah=
 DELETE /api/v1/analytics/jobs/{job_id}
 GET  /api/v1/health
+GET  /metrics
 ```
+
+`GET /api/v1/stations` mendukung filter `provinsi`, `sensor`, `type`, `operator`,
+`status`, dan pencarian `q`. Endpoint debug DHT/worker dan trace hanya aktif
+bila `CLIMAGRID_ENABLE_DEBUG=true`; jangan aktifkan debug endpoint pada server
+yang terekspos ke jaringan publik.
 
 Untuk mengaktifkan autentikasi:
 
@@ -215,16 +232,73 @@ $env:CLIMAGRID_TOKEN="ganti-dengan-token-rahasia"
 node server.js
 ```
 
-Jalankan pengujian API:
+Jalankan server (`node server.js`) lalu pengujian API:
 
 ```powershell
 node tests/api.test.js
+node tests/cache.test.js
+node tests/rpc.test.js
+node tests/persistence.test.js
+node tests/dht.test.js
+node tests/dht-api.test.js
+node tests/mpi.test.js
+node tests/observability.test.js
+node tests/load-failover.test.js
 ```
 
-Catatan implementasi: ini adalah backend lokal JavaScript yang dapat dijalankan
-tanpa dependensi. Bukan pengganti PostgreSQL/TimescaleDB, Redis 7, gRPC Go, atau
-cluster MPI produksi. Skema SQL dan IDL Proto tersedia sebagai bukti/kerangka
-implementasi, sedangkan status akhirnya harus dinilai per bukti aktual.
+Hasil terakhir pada host lokal:
+
+```text
+API tests passed
+Edge cache LRU and lease tests passed
+gRPC ingest/read/job/result/alert tests passed
+Persistence and restart tests passed
+DHT quorum, repair, handoff, and lookup tests passed
+DHT endpoint failover test passed
+Analytics worker tests passed (serial-fallback; MPI runtime available: false)
+Prometheus metrics and gateway-ingest-DHT trace tests passed
+Ingest API p95=43.94 ms; warm map p95=13.38 ms
+Submit job p95=65.88 ms; Chord lookup p95=14.82 ms
+Synthetic 5,000-station index: 1,667 matched; build+query=64.25 ms
+DHT/worker failover and duplicate-execution checks passed
+```
+
+Angka latensi di atas merupakan pengukuran lokal dengan sampel kecil, bukan
+jaminan SLA produksi. Uji 5.000 hanya membangkitkan data sintetis untuk indeks
+atribut; bukan uji throughput 5.000 stasiun.
+
+### HTTPS lokal
+
+HTTPS opsional dikendalikan oleh `HTTPS_PORT`. Buat sertifikat self-signed
+Windows dan jalankan server dengan PFX:
+
+```powershell
+$password = Read-Host "PFX password" -AsSecureString
+.\tools\create-self-signed-cert.ps1 -OutputPath "$env:LOCALAPPDATA\ClimaGrid\climagrid-dev.pfx" -Password $password
+$env:HTTPS_PFX = "$env:LOCALAPPDATA\ClimaGrid\climagrid-dev.pfx"
+$env:HTTPS_PFX_PASSWORD = "password-yang-sama"
+$env:HTTPS_PORT = "4443"
+node server.js
+```
+
+Server juga menerima `HTTPS_KEY` dan `HTTPS_CERT` untuk pasangan PEM.
+Sertifikat self-signed hanya untuk pengujian lokal; HTTPS REST tidak
+mengaktifkan TLS/mTLS pada transport gRPC internal.
+
+### Observability dan topologi lokal
+
+- `GET /metrics` menampilkan histogram latensi HTTP, hitungan ingest/duplikat,
+  hit/miss cache, dan status node DHT dalam format Prometheus.
+- Header `X-Trace-Id` menghubungkan span gateway → ingest → DHT; buffer trace
+  lokal tersedia di endpoint debug saat debug diaktifkan.
+- Port default: HTTP `4173`, gRPC internal `8443`; HTTPS hanya aktif jika
+  `HTTPS_PORT` disetel.
+- PostgreSQL/TimescaleDB, Redis, Docker, dan OpenTelemetry belum menjadi
+  layanan aktif di konfigurasi lokal. Saat ini gunakan file JSON dan LRU.
+- Topologi yang diuji adalah satu host: browser → HTTP/HTTPS gateway → gRPC
+  lokal → modul ingest/master/worker/DHT. Untuk demo LAN, batasi firewall ke
+  port HTTP/HTTPS dari subnet klien; jangan buka port gRPC `8443` ke Internet.
+  VLAN/DMZ dan aturan firewall produksi belum dideploy atau diuji.
 
 ## Pengujian
 
@@ -239,13 +313,22 @@ Checklist yang sudah diverifikasi pada Chrome:
 - [x] Layout 390 px tanpa overflow horizontal; tab bar dan bottom sheet aktif.
 - [x] Mode offline menampilkan bilah informasi dan data simulasi tetap berjalan.
 
-## Keterbatasan
+## Keterbatasan dan status
 
-- Belum ada backend, autentikasi, atau pengiriman data sensor nyata.
-- Data dan peringatan adalah simulasi, bukan keluaran model cuaca.
-- Interpolasi dijalankan di klien dengan resolusi rendah.
+- Data stasiun/seed bukan data BMKG atau keluaran model cuaca. Ingest lokal
+  hanya menyimpan data yang dikirim ke API.
+- Penyimpanan aktif adalah JSON, bukan PostgreSQL/TimescaleDB; `db/schema.sql`
+  belum menjadi database yang dijalankan.
+- Redis client tersedia, tetapi tanpa Redis server yang dapat diuji aplikasi
+  memakai LRU in-memory.
+- MPI multi-rank N=2/4 belum diuji karena `mpi4py`/`mpiexec` tidak tersedia;
+  hasil terverifikasi memakai serial fallback.
+- DHT dan worker diuji dalam satu proses lokal, bukan cluster lintas mesin.
+- HTTPS opsional diuji dengan sertifikat self-signed; gRPC TLS/mTLS,
+  OpenTelemetry/Grafana, Docker, VLAN, DMZ, dan firewall produksi belum ada.
+- Uji 5.000 stasiun bersifat sintetis dan terbatas pada indeks atribut.
 - Untuk distribusi sebagai file `.apk`, PWA dapat dibungkus menjadi **TWA**
-  (Trusted Web Activity) dengan Bubblewrap setelah di-hosting di HTTPS.
+  (Trusted Web Activity) setelah di-hosting di HTTPS.
 
 ## Kontribusi
 

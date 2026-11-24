@@ -48,8 +48,10 @@ function diurnal(hour) { return 3.0 * Math.sin((hour - 9) * Math.PI / 12); }
 const state = {
   view: 'dashboard', variable: 'temp', timeOffset: 0, interp: true,
   alertFilter: 'all', stationFilter: 'all', query: '',
+  stationResults: null,
   tick: 0, readings: 1284512, selected: null, focusStation: null,
-  alerts: [], started: Date.now()
+  alerts: [], started: Date.now(), backendMode: false, backendHasReadings: false,
+  mapData: null, alertSource: 'simulation'
 };
 
 function rainAt(s, hoursAgo) {
@@ -103,6 +105,11 @@ function valueAt(s, variable, offset) {
   if (offset === 0) return s.values[variable];
   const idx = clamp(23 - offset, 0, 23);
   return s.history[idx][variable];
+}
+
+function sourceLabel() {
+  if (!state.backendMode) return 'Mode simulasi';
+  return state.backendHasReadings ? 'Backend API · data pembacaan' : 'Backend API · seed data';
 }
 
 const now0 = new Date();
@@ -269,6 +276,10 @@ function idw(lon, lat, variable, offset) {
 
 function heatURL(variable, offset) {
   const w = 190, h = 112;
+  const apiMap = state.mapData && state.mapData.variable === variable && state.mapData.time === offset
+    ? state.mapData
+    : null;
+  if (state.backendMode && !apiMap) return null;
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
@@ -278,7 +289,11 @@ function heatURL(variable, offset) {
     const lat = MAP.lat1 - (y + 0.5) / h * (MAP.lat1 - MAP.lat0);
     for (let x = 0; x < w; x++) {
       const lon = MAP.lon0 + (x + 0.5) / w * (MAP.lon1 - MAP.lon0);
-      const val = idw(lon, lat, variable, offset);
+      const sourceY = apiMap ? Math.min(apiMap.height - 1, Math.floor(y / h * apiMap.height)) : 0;
+      const sourceX = apiMap ? Math.min(apiMap.width - 1, Math.floor(x / w * apiMap.width)) : 0;
+      const val = apiMap
+        ? apiMap.values[sourceY * apiMap.width + sourceX]
+        : idw(lon, lat, variable, offset);
       const t = clamp((val - v.domain[0]) / (v.domain[1] - v.domain[0]), 0, 1);
       const rgb = colorAt(v.stops, t).replace('rgb(', '').replace(')', '').split(',').map(Number);
       const i = (y * w + x) * 4;
@@ -438,7 +453,7 @@ function viewDashboard() {
 
   return `<div class="page-head">
     <div><div class="eyebrow">Ringkasan wilayah</div><h2>Jawa Timur hari ini</h2>
-      <p class="sub">Pantauan 20 stasiun otomatis, diolah paralel di 3 node Chord dan disajikan dari cache edge.</p></div>
+      <p class="sub">Pantauan 20 stasiun otomatis, diolah paralel di 3 node Chord dan disajikan dari cache edge. <span class="muted">${sourceLabel()}</span></p></div>
     <div class="page-actions">
       <a class="btn ghost" href="#/map"><svg class="ico"><use href="#i-map"/></svg><span>Buka peta</span></a>
     </div>
@@ -533,9 +548,9 @@ function viewMap() {
     <div class="page-actions"><a class="btn ghost" href="#/stations"><svg class="ico"><use href="#i-stations"/></svg><span>Data stasiun</span></a></div>
   </div>
   ${mapCardHTML()}
-  <div class="mapfoot"><span><b>Metode:</b> inverse distance weighting (p=2,3) · grid 4 km · ${
+  <div class="mapfoot"><span><b>Metode:</b> inverse distance weighting · grid 4 km · ${
     state.timeOffset === 0 ? 'observasi terkini' : `observasi −${state.timeOffset} jam`
-  }</span><span>Kunci: <b>hash(station_id + jam)</b> · replikasi RF=3</span></div>`;
+  } · ${state.backendMode ? (state.mapData && (state.mapData.data_source || '').includes('readings') ? 'API · pembacaan + seed' : 'API · seed data') : 'Mode simulasi'}</span><span>Kunci: <b>hash(station_id + jam)</b> · replikasi RF=3</span></div>`;
 }
 
 function viewAlerts() {
@@ -555,7 +570,7 @@ function viewAlerts() {
       <button class="chip ${state.alertFilter === 'medium' ? 'active' : ''}" data-alert-filter="medium">Sedang <span class="n">${medium}</span></button>
       <button class="chip ${state.alertFilter === 'done' ? 'active' : ''}" data-alert-filter="done">Selesai <span class="n">${done}</span></button>
     </div>
-    <span class="muted" style="font-size:11px">Diperbarui ${fmtTime(new Date())} · cache edge 30 dtk</span>
+    <span class="muted" style="font-size:11px">Diperbarui ${fmtTime(new Date())} · cache edge · ${sourceLabel()}</span>
   </div>
   <div class="alerts-grid">${alertCards()}</div>`;
 }
@@ -564,7 +579,7 @@ function viewStations() {
   const online = STATIONS.filter(s => s.status === 'online').length;
   return `<div class="page-head">
     <div><div class="eyebrow">Jaringan stasiun</div><h2>20 stasiun otomatis</h2>
-      <p class="sub">${online} online · 1 offline. Setiap stasiun mengirim satu batch pembacaan per menit.</p></div>
+      <p class="sub">${online} online · 1 offline. Setiap stasiun mengirim satu batch pembacaan per menit. <span class="muted">${sourceLabel()}</span></p></div>
     <div class="page-actions"><a class="btn ghost" href="#/map"><svg class="ico"><use href="#i-map"/></svg><span>Buka peta</span></a></div>
   </div>
   <div class="filter-bar">
@@ -580,8 +595,8 @@ function viewStations() {
 
 function stationGridHTML() {
   const q = state.query.toLowerCase().trim();
-  let list = STATIONS.filter(s => state.stationFilter === 'all' || s.status === state.stationFilter);
-  if (q) list = list.filter(s => (s.name + ' ' + s.area + ' ' + s.id + ' ' + s.kab).toLowerCase().includes(q));
+  let list = state.stationResults || STATIONS.filter(s => state.stationFilter === 'all' || s.status === state.stationFilter);
+  if (!state.stationResults && q) list = list.filter(s => (s.name + ' ' + s.area + ' ' + s.id + ' ' + s.kab).toLowerCase().includes(q));
   if (!list.length) return `<div class="card empty" style="grid-column:1/-1"><svg class="ico"><use href="#i-search"/></svg><div>Tidak ada stasiun yang cocok.</div></div>`;
   return list.map(s => {
     const t = s.values.temp;
@@ -604,11 +619,22 @@ function stationGridHTML() {
 /* ============================== router / render ============================== */
 const VIEWS = { dashboard: viewDashboard, map: viewMap, alerts: viewAlerts, stations: viewStations };
 const TITLES = { dashboard: 'Dashboard', map: 'Peta interpolasi', alerts: 'Peringatan', stations: 'Stasiun' };
+let mapLeaseSource = null;
+let mapRequestSequence = 0;
+let alertRequestSequence = 0;
 
 function route() {
   const raw = location.hash.replace(/^#\/?/, '') || 'dashboard';
   state.view = VIEWS[raw] ? raw : 'dashboard';
   render();
+  if (state.view === 'stations') refreshStationResults();
+  if (state.view === 'map' && state.backendMode) {
+    refreshMapFromBackend();
+    subscribeMapLease();
+  } else if (mapLeaseSource) {
+    mapLeaseSource.close();
+    mapLeaseSource = null;
+  }
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 }
 
@@ -638,13 +664,17 @@ function updateAlertBadges() {
 }
 
 /* ============================== sheet ============================== */
-function openSheet(id) {
+function openSheet(id, historyOverride) {
   const s = STATIONS.find(x => x.id === id);
   if (!s) return;
   state.selected = id;
   const sheet = $('#sheet');
-  const data = s.history;
-  const chart = lineChart(data.map(h => h.temp), data.map(h => h.t), { height: 160, color: '#F2B13A', label: 'Suhu 24 jam', fmtY: v => Math.round(v) + '°' });
+  const data = historyOverride === undefined
+    ? (state.backendMode ? [] : s.history)
+    : historyOverride;
+  const chart = data.length
+    ? lineChart(data.map(h => h.temp), data.map(h => h.t), { height: 160, color: '#F2B13A', label: 'Suhu 24 jam', fmtY: v => Math.round(v) + '°' })
+    : '<p class="sub">Belum ada pembacaan historis dari backend untuk stasiun ini.</p>';
   sheet.innerHTML = `
     <div class="sheet-head">
       <div><div class="eyebrow">${esc(s.kab)}</div><h3>${esc(s.name)}</h3>
@@ -662,9 +692,9 @@ function openSheet(id) {
       <div class="sheet-metric"><span><svg class="ico"><use href="#i-wind"/></svg>Angin</span><strong>${nf0.format(s.values.wind)}<small>km/j</small></strong></div>
     </div>
     <div class="sheet-section">
-      <h4>Suhu 24 jam terakhir</h4>
+      <h4>Suhu 24 jam terakhir${state.backendMode ? ' · API' : ' · Mode simulasi'}</h4>
       ${chart}
-      <div class="chart-legend"><span><i style="background:#F2B13A"></i>Observasi per jam</span><span style="margin-left:auto">${nf1.format(Math.min(...data.map(h => h.temp)))}–${nf1.format(Math.max(...data.map(h => h.temp)))}°C</span></div>
+      ${data.length ? `<div class="chart-legend"><span><i style="background:#F2B13A"></i>${state.backendMode ? 'Pembacaan API' : 'Observasi simulasi'}</span><span style="margin-left:auto">${nf1.format(Math.min(...data.map(h => h.temp)))}–${nf1.format(Math.max(...data.map(h => h.temp)))}°C</span></div>` : ''}
     </div>
     <div class="sheet-section">
       <h4>Atribut stasiun</h4>
@@ -685,6 +715,27 @@ function openSheet(id) {
   sheet.hidden = false;
   document.body.style.overflow = 'hidden';
   $('.sheet-close').focus();
+  if (state.backendMode && historyOverride === undefined) loadStationHistory(id);
+}
+
+async function loadStationHistory(id) {
+  try {
+    const response = await fetch(`/api/v1/stations/${encodeURIComponent(id)}/readings?from=${encodeURIComponent(new Date(Date.now() - 24 * 3600000).toISOString())}`);
+    if (!response.ok) throw new Error(`History API returned ${response.status}`);
+    const result = await response.json();
+    if (state.selected !== id) return;
+    openSheet(id, result.readings.map(reading => ({
+      ...reading,
+      t: new Date(reading.timestamp)
+    })));
+  } catch (_) {
+    if (state.selected !== id) return;
+    state.backendMode = false;
+    const modeLabel = $('.today span');
+    if (modeLabel) modeLabel.textContent = 'Mode simulasi · Backend offline';
+    render();
+    openSheet(id, STATIONS.find(station => station.id === id).history);
+  }
 }
 
 function closeSheet() {
@@ -716,6 +767,7 @@ document.addEventListener('click', e => {
       return;
     }
     if (a === 'refresh') {
+      if (state.backendMode) { syncFromBackend(); return; }
       state.tick += 4;
       refreshCurrent();
       state.alerts = buildAlerts();
@@ -727,13 +779,13 @@ document.addEventListener('click', e => {
     if (a === 'install') { installApp(); return; }
   }
   const varBtn = e.target.closest('[data-var]');
-  if (varBtn) { state.variable = varBtn.dataset.var; render(); return; }
+  if (varBtn) { state.variable = varBtn.dataset.var; state.mapData = null; render(); refreshMapFromBackend(); subscribeMapLease(); return; }
   const timeBtn = e.target.closest('[data-time]');
-  if (timeBtn) { state.timeOffset = +timeBtn.dataset.time; render(); return; }
+  if (timeBtn) { state.timeOffset = +timeBtn.dataset.time; state.mapData = null; render(); refreshMapFromBackend(); subscribeMapLease(); return; }
   const alertFilter = e.target.closest('[data-alert-filter]');
   if (alertFilter) { state.alertFilter = alertFilter.dataset.alertFilter; render(); return; }
   const stFilter = e.target.closest('[data-station-filter]');
-  if (stFilter) { state.stationFilter = stFilter.dataset.stationFilter; render(); return; }
+  if (stFilter) { state.stationFilter = stFilter.dataset.stationFilter; state.stationResults = null; render(); refreshStationResults(); return; }
 });
 
 document.addEventListener('change', e => {
@@ -747,7 +799,9 @@ document.addEventListener('input', e => {
   if (e.target.id === 'stationSearch') {
     state.query = e.target.value;
     const grid = $('#stationGrid');
+    state.stationResults = null;
     if (grid) grid.innerHTML = stationGridHTML();
+    refreshStationResults();
   }
 });
 
@@ -761,6 +815,7 @@ document.addEventListener('keydown', e => {
 
 $('#backdrop').addEventListener('click', closeSheet);
 $('#refreshBtn').addEventListener('click', () => {
+  if (state.backendMode) { syncFromBackend(); return; }
   state.tick += 4; refreshCurrent(); state.alerts = buildAlerts(); state.readings += 1600;
   render(); showToast('Data diperbarui dari cache edge');
 });
@@ -780,9 +835,11 @@ function showToast(msg) {
 
 function updateLive() {
   state.tick++;
-  state.readings += 380 + Math.round(rand('r' + state.tick) * 60);
-  refreshCurrent();
-  state.alerts = buildAlerts();
+  if (!state.backendMode) {
+    state.readings += 380 + Math.round(rand('r' + state.tick) * 60);
+    refreshCurrent();
+    state.alerts = buildAlerts();
+  }
   updateAlertBadges();
 
   const online = STATIONS.filter(s => s.status === 'online');
@@ -815,9 +872,13 @@ function updateLive() {
       if (tc) tc.innerHTML = lineChart(data.temp, data.times, { color: '#0F6B62', label: 'Suhu rata-rata 24 jam', fmtY: v => Math.round(v) + '°' });
       if (rc) rc.innerHTML = barChart(data.rain, data.times, { unit: 'mm/jam', label: 'Curah hujan tertinggi 24 jam' });
     } else if (state.view === 'map') {
-      const card = $('#mapCard');
-      if (card) card.outerHTML = mapCardHTML();
+      if (state.backendMode) refreshMapFromBackend();
+      else {
+        const card = $('#mapCard');
+        if (card) card.outerHTML = mapCardHTML();
+      }
     }
+    if (state.backendMode) refreshAlertsFromBackend();
     if (state.selected) openSheet(state.selected);
   }
 }
@@ -844,6 +905,131 @@ function updateOnline() {
 window.addEventListener('online', updateOnline);
 window.addEventListener('offline', updateOnline);
 
+let stationQuerySequence = 0;
+async function refreshStationResults() {
+  const sequence = ++stationQuerySequence;
+  const params = new URLSearchParams();
+  if (state.query.trim()) params.set('q', state.query.trim());
+  if (state.stationFilter !== 'all') params.set('status', state.stationFilter);
+  try {
+    const response = await fetch(`/api/v1/stations?${params.toString()}`, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(`Station API returned ${response.status}`);
+    const result = await response.json();
+    if (!Array.isArray(result.stations)) throw new Error('Station API response has no stations list');
+    if (sequence !== stationQuerySequence) return;
+    const localById = new Map(STATIONS.map(station => [station.id, station]));
+    state.stationResults = result.stations.map(station => ({
+      ...(localById.get(station.id) || {}),
+      ...station
+    }));
+    const grid = $('#stationGrid');
+    if (grid) grid.innerHTML = stationGridHTML();
+  } catch (error) {
+    if (sequence !== stationQuerySequence) return;
+    state.stationResults = null;
+    state.backendMode = false;
+    state.alertSource = 'simulation';
+    state.alerts = buildAlerts();
+    if (mapLeaseSource) {
+      mapLeaseSource.close();
+      mapLeaseSource = null;
+    }
+    if (state.view === 'stations') render();
+    const modeLabel = $('.today span');
+    if (modeLabel) modeLabel.textContent = 'Mode simulasi · Backend offline';
+  }
+}
+
+async function refreshMapFromBackend() {
+  if (!state.backendMode) return;
+  const sequence = ++mapRequestSequence;
+  const variable = state.variable;
+  const time = state.timeOffset;
+  try {
+    const response = await fetch(`/api/v1/maps/${encodeURIComponent(variable)}?time=${time}`, {
+      headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error(`Map API returned ${response.status}`);
+    const map = await response.json();
+    if (sequence !== mapRequestSequence) return;
+    state.mapData = map;
+    if (state.view === 'map') render();
+  } catch (_) {
+    if (sequence !== mapRequestSequence) return;
+    state.backendMode = false;
+    state.alertSource = 'simulation';
+    state.alerts = buildAlerts();
+    state.mapData = null;
+    if (mapLeaseSource) {
+      mapLeaseSource.close();
+      mapLeaseSource = null;
+    }
+    const modeLabel = $('.today span');
+    if (modeLabel) modeLabel.textContent = 'Mode simulasi · Backend offline';
+    if (state.view === 'map') render();
+  }
+}
+
+function subscribeMapLease() {
+  if (mapLeaseSource) mapLeaseSource.close();
+  if (!state.backendMode || state.view !== 'map' || !('EventSource' in window)) return;
+  const variable = encodeURIComponent(state.variable);
+  const time = encodeURIComponent(state.timeOffset);
+  mapLeaseSource = new EventSource(`/api/v1/maps/${variable}/events?time=${time}`);
+  mapLeaseSource.addEventListener('invalidate', () => refreshMapFromBackend());
+  mapLeaseSource.addEventListener('error', () => {
+    if (!mapLeaseSource) return;
+    mapLeaseSource.close();
+    mapLeaseSource = null;
+    state.backendMode = false;
+    state.mapData = null;
+    state.alertSource = 'simulation';
+    state.alerts = buildAlerts();
+    const modeLabel = $('.today span');
+    if (modeLabel) modeLabel.textContent = 'Mode simulasi · Backend offline';
+    if (state.view === 'map') render();
+  }, { once: true });
+}
+
+async function refreshAlertsFromBackend() {
+  const sequence = ++alertRequestSequence;
+  try {
+    const response = await fetch('/api/v1/alerts', { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(`Alerts API returned ${response.status}`);
+    const result = await response.json();
+    if (!Array.isArray(result.alerts)) throw new Error('Alerts API response has no alerts list');
+    if (sequence !== alertRequestSequence) return;
+    state.alerts = result.alerts.map(item => {
+      const station = STATIONS.find(candidate => candidate.id === item.station_id);
+      const rule = ALERT_RULES[item.type];
+      if (!station || !rule) return null;
+      const unit = item.type === 'rain' ? 'mm/jam' : item.type === 'wind' ? 'km/j' : item.type === 'dry' ? '%' : '°C';
+      return {
+        id: item.id, stationId: item.station_id, station, key: item.type, rule,
+        severity: item.severity, value: item.value, num: nf1.format(item.value), unit,
+        title: `${rule.label} di ${item.area}`,
+        desc: `Peringatan diterbitkan backend dari ${item.source === 'readings' ? 'pembacaan sensor' : 'seed data'}.`,
+        advice: rule.advice, at: new Date(item.detected_at), status: 'active'
+      };
+    }).filter(Boolean);
+    state.alertSource = 'api';
+    if (state.view === 'alerts' || state.view === 'dashboard') render();
+  } catch (_) {
+    if (sequence !== alertRequestSequence) return;
+    state.alertSource = 'simulation';
+    state.backendMode = false;
+    state.mapData = null;
+    state.alerts = buildAlerts();
+    if (mapLeaseSource) {
+      mapLeaseSource.close();
+      mapLeaseSource = null;
+    }
+    const modeLabel = $('.today span');
+    if (modeLabel) modeLabel.textContent = 'Mode simulasi · Backend offline';
+    render();
+  }
+}
+
 async function syncFromBackend() {
   try {
     const [stationResponse, healthResponse] = await Promise.all([
@@ -861,23 +1047,52 @@ async function syncFromBackend() {
       return local ? { ...local, ...s } : s;
     });
     STATIONS.splice(0, STATIONS.length, ...merged);
-    const now = new Date();
     STATIONS.forEach(s => {
       s._seed = hashStr(s.id);
-      s.history = buildHistory(s, now);
+      if (!s.history) s.history = buildHistory(s, new Date());
+      const latest = s.latest_reading;
+      s.values = latest ? {
+        temp: latest.temp, rh: latest.rh, rain: latest.rain, wind: latest.wind,
+        at: new Date(latest.timestamp)
+      } : {
+        temp: s.tempBase, rh: s.rhBase, rain: s.rainBase, wind: s.windBase,
+        at: new Date(s.installed)
+      };
     });
-    refreshCurrent();
-    state.alerts = buildAlerts();
+    state.backendMode = true;
+    state.backendHasReadings = STATIONS.some(s => s.latest_reading);
+    state.readings = health.ingested_readings;
     render();
 
     const sideStatus = $('.side-status-head');
     if (sideStatus) sideStatus.innerHTML = '<span class="pulse-dot"></span><span>Backend terhubung</span>';
     const sideText = $('.side-status p');
     if (sideText) sideText.innerHTML = `${health.dht.length} node Chord · RF=3<br>${STATIONS.filter(s => s.status === 'online').length} dari ${STATIONS.length} stasiun online`;
+    const modeLabel = $('.today span');
+    if (modeLabel) modeLabel.textContent = state.backendHasReadings
+      ? 'Backend API · pembacaan tersimpan'
+      : 'Backend API · seed data, belum ada pembacaan';
+    if (state.view === 'stations') refreshStationResults();
+    await refreshAlertsFromBackend();
+    if (state.view === 'map') {
+      await refreshMapFromBackend();
+      subscribeMapLease();
+    }
     showToast('Data dimuat dari API backend');
   } catch (_) {
+    state.backendMode = false;
+    state.mapData = null;
+    state.alertSource = 'simulation';
+    state.alerts = buildAlerts();
+    if (mapLeaseSource) {
+      mapLeaseSource.close();
+      mapLeaseSource = null;
+    }
+    render();
     const sideStatus = $('.side-status-head');
     if (sideStatus) sideStatus.innerHTML = '<span class="pulse-dot" style="background:#B23A2B"></span><span>Backend tidak tersedia</span>';
+    const modeLabel = $('.today span');
+    if (modeLabel) modeLabel.textContent = 'Mode simulasi · Backend offline';
     showToast('Backend tidak tersedia — PWA menampilkan data cache');
   }
 }

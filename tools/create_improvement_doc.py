@@ -5,134 +5,193 @@ if importlib.util.find_spec("docx") is None:
     raise SystemExit("python-docx belum terpasang")
 
 from docx import Document
-from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Pt
 
-out = Path(r"D:\firda\SISTER\ClimaGrid_Dokumen_Perbaikan.docx")
+
+OUT = Path(r"D:\firda\SISTER\ClimaGrid_Dokumen_Perbaikan.docx")
 doc = Document()
 section = doc.sections[0]
-section.top_margin = Inches(0.7)
-section.bottom_margin = Inches(0.7)
+section.top_margin = Inches(0.65)
+section.bottom_margin = Inches(0.65)
 section.left_margin = Inches(0.75)
 section.right_margin = Inches(0.75)
-
-styles = doc.styles
-styles["Normal"].font.name = "Aptos"
-styles["Normal"].font.size = Pt(10)
-for name in ("Title", "Heading 1", "Heading 2"):
-    styles[name].font.name = "Aptos Display"
+doc.styles["Normal"].font.name = "Aptos"
+doc.styles["Normal"].font.size = Pt(9.5)
 
 title = doc.add_paragraph()
 title.style = "Title"
 title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-run = title.add_run("ClimaGrid v1.0")
-run.bold = True
+title.add_run("ClimaGrid v1.0 — Hasil Perbaikan").bold = True
 subtitle = doc.add_paragraph()
 subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-subtitle.add_run("Dokumen Hasil Perbaikan dan Evaluasi Implementasi").bold = True
+subtitle.add_run("Evaluasi berdasarkan PRD 18 slide dan Pemetaan_Slide_ClimaGrid.xlsx")
+date = doc.add_paragraph()
+date.alignment = WD_ALIGN_PARAGRAPH.CENTER
+date.add_run("24 November 2026 · Bukti dari pengujian lokal yang benar-benar dijalankan")
 
-meta = doc.add_paragraph()
-meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
-meta.add_run("Tanggal: 24 November 2026\n")
-meta.add_run("Acuan: PRD ClimaGrid v1.0 dan Pemetaan_Slide_ClimaGrid.xlsx")
-
-doc.add_heading("1. Ringkasan", level=1)
+doc.add_heading("Ringkasan keputusan", level=1)
 doc.add_paragraph(
-    "Dokumen ini mencatat perbaikan yang telah dilakukan pada aplikasi ClimaGrid "
-    "berdasarkan evaluasi awal terhadap PRD dan checklist Excel. Perbaikan difokuskan "
-    "pada penambahan backend REST lokal, sumber data melalui API, persistensi hasil "
-    "pembacaan dan job, deduplikasi, cache, pembentukan kerangka DHT, serta dokumentasi "
-    "database dan MPI."
+    "Implementasi menutup banyak kekurangan fungsional pada lingkungan lokal: REST dan gRPC Node.js, "
+    "penyimpanan JSON persisten, DHT in-process, indeks atribut, worker analitik, cache, frontend API, "
+    "metrik Prometheus, trace sederhana, HTTPS opsional, serta uji failover dan beban. Sistem belum "
+    "dinyatakan Terpenuhi secara keseluruhan karena PostgreSQL/TimescaleDB, Redis server, MPI multi-rank, "
+    "OpenTelemetry, mTLS, dan deployment cluster tidak tersedia atau belum diuji."
+)
+doc.add_paragraph(
+    "Arti status: Terpenuhi berarti kebutuhan yang diuji pada ruang lingkup lokal memiliki bukti; "
+    "Sebagian berarti ada implementasi/fallback namun bukti produksi atau dependensi opsional belum; "
+    "Belum ada berarti belum ada implementasi/bukti yang dapat dijalankan. Tidak ada status global "
+    "yang menyatakan seluruh PRD telah selesai."
 )
 
-doc.add_heading("2. Perbaikan yang Sudah Diimplementasikan", level=1)
-implemented = [
-    ("REST API", "server.js", "Delapan endpoint PRD, validasi, status HTTP, ETag, Conditional GET, autentikasi token opsional, dan rate limit."),
-    ("Data stasiun", "data/stations.json", "20 stasiun dipindahkan ke dataset JSON terpusat dan digunakan oleh API serta frontend."),
-    ("Frontend-backend", "app.js", "Frontend sinkron dengan GET /api/v1/stations dan GET /api/v1/health; status backend ditampilkan."),
-    ("Ingest dan deduplikasi", "server.js; tests/api.test.js", "Idempotency key dan SHA-256, payload duplikat disimpan sekali, dan duplikasi dihitung."),
-    ("Job analitik", "server.js", "POST/GET/DELETE analytics job; status 202 Accepted dan status job dapat dipantau."),
-    ("Peta dan peringatan", "server.js", "Endpoint map dengan grid 95 x 56 serta endpoint alert berdasarkan wilayah."),
-    ("Cache", "server.js", "LRU in-memory untuk peta dan histori, lease peta 30 detik, serta ETag."),
-    ("DHT dasar", "server.js", "Tiga node Chord in-memory, hashing SHA-256, penentuan successor, dan replikasi RF=3."),
-    ("Skema database", "db/schema.sql", "DDL stations, station_attributes, ingest_batches, readings, jobs, job_results, maps, alerts, hypertable, BRIN/B-tree, dan agregat jam."),
-    ("IDL RPC", "proto/climagrid.proto", "IDL protobuf untuk WeatherService, JobService, ResultService, dan AlertService."),
-    ("Kerangka MPI", "analytics/mpi_idw.py", "Implementasi IDW serial dan kerangka MPI Bcast/Gather untuk beberapa rank."),
-    ("Dokumentasi", "README.md", "Panduan menjalankan API, token, dan pengujian."),
-    ("Evaluasi workbook", "Pemetaan_Slide_ClimaGrid.xlsx", "Sheet Evaluasi Terbaru berisi status, lokasi kode, bukti, dan hasil pengujian.")
+stages = [
+    (
+        "Tahap 1 — Pemisahan komponen",
+        "Status: Sebagian. Gateway, ingest, master, worker analitik, dan DHT dipisah ke modul backend; "
+        "antrean job dijalankan oleh MasterNode dan worker; heartbeat 5 detik dilaporkan health. Modul "
+        "masih berjalan dalam satu proses Node.js, bukan service terpisah.",
+        "File/fungsi: backend/gateway.js:createGateway; backend/ingest.js:ingestReading; "
+        "backend/master.js:MasterNode.submit/drain/health; backend/worker.js:executeJob; "
+        "backend/dht.js:ChordRing; server.js:/api/v1/health.",
+        "Uji: node tests/api.test.js — API tests passed; health memuat status Master dan DHT."
+    ),
+    (
+        "Tahap 2 — Persistensi",
+        "Status: Sebagian. JSON store menulis readings, batch, jobs, hasil, peta, alerts, checksum, "
+        "agregat per jam, dan retensi; restart diuji. PostgreSQL/TimescaleDB belum tersedia dan DATABASE_URL "
+        "belum menjadi adapter aktif, sehingga db/schema.sql hanya DDL.",
+        "File/fungsi: backend/store.js:JsonStore, registerReading, prune; server.js:retentionTimer; "
+        "db/schema.sql.",
+        "Uji: node tests/persistence.test.js — Persistence and restart tests passed."
+    ),
+    (
+        "Tahap 3 — DHT",
+        "Status: Sebagian. Finger table, lookup, quorum W=2/R=2, read repair, hinted handoff, "
+        "anti-entropy, serta endpoint debug node tersedia dan diuji di ring tiga node in-process; "
+        "belum dibuktikan pada cluster lintas mesin.",
+        "File/fungsi: backend/dht.js:ChordRing.lookup/write/read/antiEntropy/setNode; "
+        "server.js:/api/v1/debug/dht/*.",
+        "Uji: node tests/dht.test.js — DHT quorum, repair, handoff, and lookup tests passed; "
+        "node tests/dht-api.test.js — DHT endpoint failover test passed."
+    ),
+    (
+        "Tahap 4 — Pencarian atribut",
+        "Status: Terpenuhi untuk pencarian/filter API lokal. Indeks atribut mendukung provinsi, sensor, "
+        "type, operator, status, dan query teks; halaman stasiun membaca API.",
+        "File/fungsi: backend/attribute-index.js:StationAttributeIndex.query; server.js:GET /api/v1/stations; "
+        "app.js:refreshStationResults.",
+        "Uji: node tests/api.test.js — filter provinsi/sensor/type/operator dan pencarian Sukolilo lulus."
+    ),
+    (
+        "Tahap 5 — MPI",
+        "Status: Sebagian. IDW dan statistik mempunyai jalur MPI serta fallback serial dengan checksum; "
+        "lingkungan tidak memiliki mpi4py/mpiexec yang dapat dipakai, jadi N=2/4 tidak diklaim lulus.",
+        "File/fungsi: analytics/mpi_idw.py:IDW/statistik MPI; backend/worker.js:runPythonAnalytics.",
+        "Uji: node tests/mpi.test.js — Analytics worker tests passed (serial-fallback; MPI runtime available: false)."
+    ),
+    (
+        "Tahap 6 — RPC",
+        "Status: Terpenuhi untuk transport gRPC Node.js lokal. Layanan ingest/read, job, result, dan alert "
+        "aktif dengan deadline 2 detik dan deduplikasi operasi; belum transport lintas host atau mTLS.",
+        "File/fungsi: proto/climagrid.proto; backend/rpc.js:RpcTransport; server.js REST-to-gRPC.",
+        "Uji: node tests/rpc.test.js — gRPC ingest/read/job/result/alert tests passed."
+    ),
+    (
+        "Tahap 7 — Cache dan frontend",
+        "Status: Sebagian. LRU, lease 30 detik, callback invalidasi, invalidasi history/map/alerts setelah "
+        "ingest, dan fallback Redis tersedia. Frontend memakai API maps, alerts, station readings/history; "
+        "mode API/seed dan mode simulasi diberi label. Redis server tidak tersedia untuk pengujian integrasi.",
+        "File/fungsi: backend/edge-cache.js:EdgeCache; server.js:/api/v1/maps, /api/v1/alerts, "
+        "/api/v1/stations/{id}/readings; app.js:refreshMapFromBackend, refreshAlertsFromBackend, "
+        "loadStationHistory, sourceLabel.",
+        "Uji: node tests/cache.test.js — Edge cache LRU and lease tests passed; node tests/api.test.js — "
+        "ETag 304 dan invalidasi cache setelah ingest lulus; browser lokal memperlihatkan peta/alert API dan "
+        "pesan histori kosong yang jelas."
+    ),
+    (
+        "Tahap 8 — Observability dan keamanan",
+        "Status: Sebagian. /metrics menghasilkan histogram latency, ingest/duplicate, cache, dan status node DHT; "
+        "trace ID menghubungkan gateway→ingest→DHT; HTTPS_PORT opsional bekerja dengan self-signed PFX. "
+        "OpenTelemetry/Grafana, gRPC TLS/mTLS, VLAN/DMZ, dan produksi belum dikonfigurasi. "
+        "tools/create-self-signed-cert.ps1 lolos parse; eksekusinya dibatasi ExecutionPolicy host, sehingga "
+        "uji TLS memakai sertifikat self-signed yang dibuat langsung melalui cmdlet Windows.",
+        "File/fungsi: backend/metrics.js:PrometheusMetrics; backend/trace.js:TraceBuffer; "
+        "server.js:/metrics, X-Trace-Id, HTTPS_PORT; tools/create-self-signed-cert.ps1.",
+        "Uji: node tests/observability.test.js — Prometheus metrics and gateway-ingest-DHT trace tests passed; "
+        "HTTPS health check — passed."
+    ),
+    (
+        "Tahap 9 — Beban dan failover",
+        "Status: Sebagian. Load test Node mengukur API; worker dapat dipause/resume; failover DHT dan "
+        "worker memastikan satu pembacaan dan satu eksekusi job pada uji lokal. Simulasi 5.000 stasiun "
+        "hanya mengukur indeks sintetis, bukan cluster atau 5.000 ingest.",
+        "File/fungsi: tests/load-failover.test.js; backend/master.js:setWorkerOnline; "
+        "server.js:/api/v1/debug/worker.",
+        "Uji aktual: ingest n=20 p50 32,24 ms p95 43,94 ms (<250); map warm n=30 p50 9,35 ms p95 "
+        "13,38 ms (<100); submit job n=10 p50 14,19 ms p95 65,88 ms (<150); Chord lookup n=20 p50 "
+        "11,54 ms p95 14,82 ms (<50). 5.000 stasiun sintetis: 1.667 cocok, build+query 64,25 ms. "
+        "Semua angka adalah hasil lokal satu kali, bukan SLA produksi."
+    ),
+    (
+        "Tahap 10 — Dokumentasi dan bukti",
+        "Status: Terpenuhi untuk artefak dokumentasi lokal. README, dokumen ini, dan workbook pemetaan "
+        "diperbarui; status aspek hanya didasarkan pada bukti lokal yang dijelaskan.",
+        "File: README.md; tools/create_improvement_doc.py; tools/update_evaluation.py; "
+        "D:\\firda\\SISTER\\Pemetaan_Slide_ClimaGrid.xlsx.",
+        "Uji: python tools/update_evaluation.py — diperbarui dan aspek workbook dicocokkan; "
+        "python tools/create_improvement_doc.py — dokumen dibuat."
+    ),
 ]
-table = doc.add_table(rows=1, cols=3)
-table.alignment = WD_TABLE_ALIGNMENT.CENTER
-table.style = "Table Grid"
-headers = table.rows[0].cells
-headers[0].text = "Komponen"
-headers[1].text = "Lokasi"
-headers[2].text = "Bukti implementasi"
-for comp, loc, evidence in implemented:
-    row = table.add_row().cells
-    row[0].text = comp
-    row[1].text = loc
-    row[2].text = evidence
 
-doc.add_heading("3. Hasil Pengujian yang Dijalankan", level=1)
-tests = [
-    ("Pengujian API", "node tests/api.test.js", "Lulus", "GET stations, health, ingest, duplikasi, histori, job, dan peta."),
-    ("Pengujian server", "curl /api/v1/stations", "200 OK", "Jumlah stasiun 20 dan ETag diterima."),
-    ("Pengujian health", "curl /api/v1/health", "200 OK", "Status, hitungan ingest/duplikat, tiga node DHT, dan cache dilaporkan."),
-    ("Pengujian deduplikasi", "Idempotency-Key berulang", "Lulus", "Permintaan duplikat mengembalikan duplicate=true."),
-    ("Pengujian IDW", "python analytics/mpi_idw.py", "Lulus satu rank", "5.320 titik, checksum serial dan MPI cocok."),
-]
-test_table = doc.add_table(rows=1, cols=4)
-test_table.style = "Table Grid"
-test_headers = test_table.rows[0].cells
-for i, text in enumerate(("Pengujian", "Perintah", "Hasil", "Bukti")):
-    test_headers[i].text = text
-for item in tests:
-    row = test_table.add_row().cells
-    for i, text in enumerate(item):
-        row[i].text = text
+for heading, status, files, evidence in stages:
+    doc.add_heading(heading, level=1)
+    doc.add_paragraph(status)
+    doc.add_paragraph(files)
+    doc.add_paragraph(evidence)
 
-doc.add_heading("4. Cara Menjalankan", level=1)
-for text in (
-    'Masuk ke folder: cd "D:\\firda\\SISTER\\climagrid-app"',
-    "Jalankan backend/PWA: node server.js",
-    "Buka: http://localhost:4173",
-    "Health API: http://localhost:4173/api/v1/health",
-    "Jalankan pengujian: node tests/api.test.js",
-    "Jalankan IDW serial: python analytics/mpi_idw.py",
+doc.add_heading("Perintah regresi akhir", level=1)
+for command in (
+    "node tests/api.test.js (jalankan dengan server lokal/CLIMAGRID_TEST_URL)",
+    "node tests/cache.test.js",
+    "node tests/rpc.test.js",
+    "node tests/persistence.test.js",
+    "node tests/dht.test.js",
+    "node tests/dht-api.test.js",
+    "node tests/mpi.test.js",
+    "node tests/observability.test.js",
+    "node tests/load-failover.test.js",
 ):
-    doc.add_paragraph(text, style="List Bullet")
+    doc.add_paragraph(command, style="List Bullet")
+doc.add_paragraph(
+    "Hasil regresi pada 24 November 2026: seluruh perintah di atas lulus; uji MPI hanya membuktikan "
+    "serial fallback. Beban/failover melaporkan p95 dan status target pada keluaran terminal."
+)
 
-doc.add_heading("5. Bagian yang Masih Sebagian atau Belum Ada", level=1)
+doc.add_heading("Masih Sebagian atau Belum ada", level=1)
 remaining = [
-    "PostgreSQL 16 dan TimescaleDB hanya ditulis sebagai DDL; belum dijalankan dan belum menjadi penyimpanan aktif.",
-    "Redis 7 belum dipasang; cache saat ini adalah LRU in-memory Node.js.",
-    "Transport gRPC/Go belum dijalankan. File proto hanya menyediakan IDL.",
-    "mpi4py belum terpasang sehingga pengujian multi-rank belum dapat dijalankan.",
-    "Finger table, failure recovery, hinted handoff, read/write quorum, read repair, dan anti-entropy penuh belum lengkap.",
-    "OpenTelemetry, Prometheus, dan Grafana belum diimplementasikan sebagai layanan aktif.",
-    "TLS/mTLS, Docker/VLAN produksi, dan firewall antar-VLAN belum dikonfigurasi.",
-    "Pengujian beban, p95, pengujian 5.000 stasiun, dan pengujian failover belum dijalankan.",
+    "PostgreSQL/TimescaleDB belum tersedia; file JSON adalah penyimpanan aktif dan DATABASE_URL belum terhubung.",
+    "Redis server belum tersedia; adapter Redis hanya jalur opsional yang belum diuji terhadap server nyata.",
+    "mpi4py/mpiexec tidak tersedia; hasil N=2 dan N=4 belum dapat diklaim.",
+    "Chord dan worker berjalan dalam satu proses Node.js; belum cluster lintas mesin atau failure domain nyata.",
+    "5.000 stasiun sintetis hanya diuji pada indeks atribut, bukan ingest/API dan storage end-to-end.",
+    "OpenTelemetry, Grafana, Docker/VLAN/DMZ/firewall produksi, serta gRPC TLS/mTLS belum ada.",
+    "HTTPS REST opsional dan sertifikat self-signed teruji lokal; sertifikat self-signed bukan sertifikat produksi.",
+    "Ambang latensi diukur dengan sampel lokal terbatas; bukan jaminan beban produksi."
 ]
 for item in remaining:
     doc.add_paragraph(item, style="List Bullet")
 
-doc.add_heading("6. Kesimpulan Status", level=1)
+doc.add_heading("Kesimpulan", level=1)
 doc.add_paragraph(
-    "Tahap ini memperbaiki fondasi aplikasi dan mengubah sumber data stasiun serta "
-    "beberapa operasi utama menjadi layanan REST yang dapat diuji. Namun aplikasi belum "
-    "dapat dinyatakan memenuhi seluruh arsitektur PRD. Status final pada workbook harus "
-    "tetap menggunakan Terpenuhi, Sebagian, atau Belum Ada berdasarkan bukti aktual."
-)
-
-doc.add_paragraph(
-    "File evaluasi workbook: D:\\firda\\SISTER\\Pemetaan_Slide_ClimaGrid.xlsx"
+    "Perubahan memberi implementasi lokal yang dapat dijalankan dan diuji untuk sebagian besar alur PRD, "
+    "tetapi ClimaGrid belum memenuhi seluruh target deployment terdistribusi produksi. Workbook menjadi "
+    "sumber status per aspek; status Sebagian dipertahankan bila dependensi eksternal, skala, atau transport "
+    "cluster belum benar-benar diuji."
 )
 
 footer = section.footer.paragraphs[0]
 footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
-footer.add_run("ClimaGrid v1.0 — Dokumentasi Perbaikan")
-
-doc.save(out)
-print(out)
+footer.add_run("ClimaGrid v1.0 — Hasil pengujian lokal, bukan sertifikasi produksi")
+doc.save(OUT)
+print(OUT)

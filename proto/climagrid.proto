@@ -18,6 +18,7 @@ message ReadingBatch {
   repeated Reading readings = 2;
   fixed32 checksum_crc32 = 3;
   bool resend = 4;
+  string payload_sha256 = 5;
 }
 
 message IngestReply {
@@ -41,6 +42,7 @@ message JobRequest {
   string type = 2;
   string variable = 3;
   sint32 time_offset = 4;
+  string station_id = 5;
 }
 
 message JobReply {
@@ -48,6 +50,24 @@ message JobReply {
   string status = 2;
   uint32 progress = 3;
   string result_sha256 = 4;
+}
+
+message StoredResult {
+  string job_id = 1;
+  string payload_json = 2;
+  string payload_sha256 = 3;
+}
+
+message AlertEvent {
+  string alert_id = 1;
+  string payload_json = 2;
+  string payload_sha256 = 3;
+}
+
+message PublishReply {
+  string alert_id = 1;
+  bool published = 2;
+  bool duplicate = 3;
 }
 
 service WeatherService {
@@ -60,9 +80,9 @@ service JobService {
 }
 
 service ResultService {
-  rpc Store(JobReply) returns (IngestReply);
+  rpc Store(StoredResult) returns (IngestReply);
 }
 
 service AlertService {
-  rpc Publish(ReadingBatch) returns (IngestReply);
+  rpc Publish(AlertEvent) returns (PublishReply);
 }
