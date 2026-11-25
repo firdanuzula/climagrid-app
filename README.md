@@ -43,6 +43,7 @@ dan histori pembacaan diminta dari API.
 | **Peringatan** | Deteksi suhu ekstrem, hujan lebat, udara kering, dan angin kencang; filter prioritas dan riwayat selesai |
 | **Stasiun** | 20 stasiun, pencarian, filter online/offline, sheet detail berisi grafik 24 jam dan atribut stasiun |
 | **Backend lokal** | REST, gRPC Node.js, antrean job, JSON persisten, DHT lokal, LRU/lease, dan serial fallback analytics |
+| **Metode komunikasi** | REST API, RPC gRPC, dan Java RMI; halaman uji bersama dan laporan perbandingan |
 | **Mode simulasi** | Fallback deterministik dengan label eksplisit bila backend tidak terjangkau |
 | **PWA** | Manifest, ikon, service worker, dapat dipasang ke layar utama, dan tetap terbuka saat offline |
 | **Responsif** | Sidebar di desktop, tab bar bawah dan bottom sheet di ponsel |
@@ -65,6 +66,7 @@ dan histori pembacaan diminta dari API.
 ### Prasyarat
 
 - [Node.js](https://nodejs.org) 18 atau lebih baru
+- [JDK](https://adoptium.net/) 17 atau lebih baru untuk service RMI (opsional untuk REST/gRPC)
 - Browser modern (Chrome, Edge, Firefox, Safari)
 
 Dependensi backend dikelola dengan npm. Frontend tidak memerlukan proses build.
@@ -82,6 +84,14 @@ Buka **http://localhost:4173**.
 
 Di Windows, kamu juga bisa **klik dua kali `Jalankan ClimaGrid.bat`** — server
 langsung berjalan dan browser terbuka otomatis.
+
+### Menjalankan service RMI
+
+Jalankan backend Node.js seperti biasa, kemudian buka terminal kedua pada root
+project dan ikuti [instruksi service RMI](backend/rmi/README.md). Service Java
+memakai port registry `1099`, object `1100`, dan bridge lokal `8765`; menu
+**Uji komunikasi** akan menampilkan status ketiga metode. RPC pada backend
+tetap memakai gRPC internal di port `8443`.
 
 > Gunakan `node server.js`, bukan membuka `index.html` lewat `file://`.
 > Service worker, mode offline, dan tombol pemasangan hanya aktif saat aplikasi
@@ -124,10 +134,11 @@ climagrid-app/
 ├─ sw.js                   # Service worker (cache app shell)
 ├─ server.js               # REST gateway dan server HTTP/HTTPS
 ├─ backend/                # Gateway, ingest, master/worker, DHT, store, RPC/cache
+│  └─ rmi/                 # Remote interface, Java RMI server/client, HTTP bridge
 ├─ analytics/              # MPI IDW dan statistik dengan fallback serial
 ├─ proto/                  # Kontrak protobuf untuk gRPC Node.js
 ├─ db/schema.sql           # Skema PostgreSQL/TimescaleDB (belum adapter aktif)
-├─ tests/                  # API, persistensi, DHT, RPC, cache, observability, load
+├─ tests/                  # API, persistensi, DHT, RPC/RMI, cache, observability, load
 ├─ Jalankan ClimaGrid.bat  # Launcher Windows
 ├─ icons/                  # Ikon 192/512/maskable/apple/favicon
 ├─ assets/fonts/           # Inter 400/600/700/800

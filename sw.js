@@ -1,7 +1,7 @@
 /* ClimaGrid service worker — app shell offline-first */
 'use strict';
 
-const VERSION = 'climagrid-v1.0.6';
+const VERSION = 'climagrid-v1.0.8';
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 const SHELL_ASSETS = [
@@ -54,6 +54,11 @@ self.addEventListener('fetch', event => {
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(req));
+    return;
+  }
 
   if (req.mode === 'navigate') {
     event.respondWith((async () => {

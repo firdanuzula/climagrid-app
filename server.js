@@ -22,6 +22,7 @@ const PORT = Number(process.env.PORT) || 4173;
 const HTTPS_PORT = Number(process.env.HTTPS_PORT) || 0;
 const HOST = process.env.HOST || '0.0.0.0';
 const AUTH_TOKEN = process.env.CLIMAGRID_TOKEN || '';
+const RMI_BRIDGE_URL = process.env.CLIMAGRID_RMI_BRIDGE_URL || 'http://127.0.0.1:8765';
 const STATE_FILE = process.env.CLIMAGRID_STATE_FILE || path.join(ROOT, 'data', 'backend-state.json');
 const STATION_FILE = path.join(ROOT, 'data', 'stations.json');
 const gateway = createGateway({ token: AUTH_TOKEN, limit: Number(process.env.CLIMAGRID_RATE_LIMIT) || 120 });
@@ -287,6 +288,38 @@ async function handleRequest(req, res) {
         const tag = gateway.etag(body);
         if (req.headers['if-none-match'] === tag) return send(res, 304, '', { ETag: tag });
         return send(res, 200, body, { ETag: tag, 'Cache-Control': 'private, max-age=30' });
+      }
+
+      const rpcReadingsMatch = pathname.match(/^\/api\/v1\/rpc\/stations\/([^/]+)\/readings$/);
+      if (req.method === 'GET' && rpcReadingsMatch) {
+        const stationId = decodeURIComponent(rpcReadingsMatch[1]);
+        if (!stations.has(stationId)) return sendError(res, 404, 'STATION_NOT_FOUND', 'Station not found');
+        const result = await rpc.call(rpc.clients.weather, 'getReadings', {
+          station_id: stationId,
+          from: url.searchParams.get('from') || '',
+          to: url.searchParams.get('to') || ''
+        });
+        return send(res, 200, { station_id: stationId, readings: result.readings }, { 'Cache-Control': 'no-store' });
+      }
+
+      const rmiReadingsMatch = pathname.match(/^\/api\/v1\/rmi\/stations\/([^/]+)\/readings$/);
+      if (req.method === 'GET' && rmiReadingsMatch) {
+        const stationId = decodeURIComponent(rmiReadingsMatch[1]);
+        if (!stations.has(stationId)) return sendError(res, 404, 'STATION_NOT_FOUND', 'Station not found');
+        try {
+          const target = new URL(
+            `/api/v1/stations/${encodeURIComponent(stationId)}/readings${url.search}`,
+            RMI_BRIDGE_URL
+          );
+          const response = await fetch(target, { signal: AbortSignal.timeout(6000) });
+          const body = await response.text();
+          if (!response.ok) {
+            return sendError(res, 502, 'RMI_CALL_FAILED', `RMI bridge returned HTTP ${response.status}`);
+          }
+          return send(res, 200, JSON.parse(body), { 'Cache-Control': 'no-store' });
+        } catch (error) {
+          return sendError(res, 503, 'RMI_UNAVAILABLE', `RMI bridge unavailable: ${error.message}`);
+        }
       }
 
       if (req.method === 'GET' && pathname === '/api/v1/stations') {

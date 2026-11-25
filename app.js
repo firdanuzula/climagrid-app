@@ -51,7 +51,8 @@ const state = {
   stationResults: null,
   tick: 0, readings: 1284512, selected: null, focusStation: null,
   alerts: [], started: Date.now(), backendMode: false, backendHasReadings: false,
-  mapData: null, alertSource: 'simulation'
+  mapData: null, alertSource: 'simulation',
+  communicationsStation: 'SBY-01', communicationTest: null, communicationTestRunning: false
 };
 
 function rainAt(s, hoursAgo) {
@@ -593,6 +594,99 @@ function viewStations() {
   <div class="station-grid" id="stationGrid">${stationGridHTML()}</div>`;
 }
 
+function viewCommunications() {
+  const resultRows = state.communicationTest
+    ? state.communicationTest.results.map(result => `<tr>
+        <th scope="row">${esc(result.label)}</th>
+        <td><span class="status-pill ${result.ok ? '' : 'off'}">${result.ok ? 'Berhasil' : 'Gagal'}</span></td>
+        <td>${result.elapsedMs === null ? '—' : `${result.elapsedMs.toFixed(2)} ms`}</td>
+        <td>${result.ok ? `${result.readingCount} pembacaan` : esc(result.error)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="4">Belum ada hasil. Jalankan pengujian untuk menampilkan respons dan waktu nyata.</td></tr>';
+  const consistency = state.communicationTest
+    ? state.communicationTest.consistent
+      ? 'Ketiga respons identik untuk stasiun dan rentang waktu yang diuji.'
+      : 'Ada respons berbeda atau salah satu metode gagal; periksa detail hasil.'
+    : 'Pilih stasiun dan jalankan ketiga metode dengan permintaan yang sama.';
+
+  return `<div class="page-head">
+    <div><div class="eyebrow">Eksperimen transport</div><h2>Uji REST API, RPC, dan RMI</h2>
+      <p class="sub">Permintaan GET pembacaan stasiun yang sama dikirim melalui ketiga metode; hasil dan waktu round-trip dicatat dari browser.</p></div>
+  </div>
+  <section class="card card-pad communication-control">
+    <label for="communicationStation">Stasiun untuk pengujian</label>
+    <select id="communicationStation">
+      ${STATIONS.map(station => `<option value="${esc(station.id)}" ${station.id === state.communicationsStation ? 'selected' : ''}>${esc(station.id)} · ${esc(station.area)}</option>`).join('')}
+    </select>
+    <button class="btn primary" type="button" data-communications-test ${state.communicationTestRunning ? 'disabled' : ''}>
+      ${state.communicationTestRunning ? 'Menguji…' : 'Uji ketiga metode'}
+    </button>
+    <p class="muted">Permintaan membaca data (tidak mengubah state). Waktu mencakup gateway dan adapter yang diperlukan setiap jalur.</p>
+  </section>
+  <section class="card card-pad" aria-live="polite">
+    <div class="card-head"><div><h3>Hasil pengujian terakhir</h3><p>${state.communicationTest ? `Diuji ${esc(state.communicationTest.at)} · ${esc(state.communicationTest.stationId)}` : 'Belum diuji dalam sesi ini'}</p></div></div>
+    <div class="comparison-table-wrap"><table class="comparison-table">
+      <thead><tr><th>Metode</th><th>Status</th><th>Round-trip</th><th>Hasil</th></tr></thead>
+      <tbody>${resultRows}</tbody>
+    </table></div>
+    <p class="comparison-note">${consistency}</p>
+    <p class="comparison-note">Latensi ini adalah satu sampel end-to-end, bukan benchmark statistik: REST memakai cache gateway, RPC langsung ke gRPC, sedangkan RMI melalui bridge HTTP dan membaca sumber REST yang sama.</p>
+  </section>`;
+}
+
+function viewCommunicationReport() {
+  const test = state.communicationTest;
+  const results = test
+    ? test.results.map(result => `<tr><th scope="row">${esc(result.label)}</th><td>${result.ok ? 'Berhasil' : 'Gagal'}</td><td>${result.elapsedMs === null ? '—' : `${result.elapsedMs.toFixed(2)} ms`}</td><td>${result.ok ? `${result.readingCount} pembacaan` : esc(result.error)}</td></tr>`).join('')
+    : '<tr><td colspan="4">Belum ada hasil uji pada sesi aplikasi ini.</td></tr>';
+
+  return `<div class="page-head">
+    <div><div class="eyebrow">Laporan teknis</div><h2>Laporan Perbandingan REST API, RPC, dan RMI</h2>
+      <p class="sub">Arsitektur aktual, cara komunikasi, dan hasil uji dari implementasi ClimaGrid.</p></div>
+  </div>
+  <div class="report-grid">
+    <section class="card card-pad"><h3>Pengertian dan cara kerja</h3>
+      <p><b>REST API</b> mengekspos resource melalui HTTP/1.1 dan URI, memakai metode HTTP serta representasi JSON. Browser mengirim GET ke gateway Node.js, gateway memvalidasi request dan menyajikan data pembacaan (dengan edge cache); pada cache miss, gateway menggunakan layanan gRPC internal. HTTPS dapat diaktifkan melalui konfigurasi yang sudah ada.</p>
+      <p><b>RPC (gRPC)</b> memanggil prosedur jarak jauh dengan kontrak protobuf bertipe. ClimaGrid memakai gRPC Node.js dan HTTP/2: klien mengirim <code>GetReadings</code> berisi station_id/from/to ke layanan WeatherService, lalu server membalas daftar pembacaan.</p>
+      <p><b>RMI</b> memanggil method pada objek Java jarak jauh. Registry menemukan remote interface, lalu JRMP/RMI mengirim pemanggilan dan nilai Java terserialisasi antara client dan server. Di ClimaGrid, Java RMI menjalankan <code>getReadings</code> yang mengembalikan Java String berisi JSON; adapter HTTP lokal memungkinkan browser mengaksesnya, sementara implementasi server meneruskan pembacaan ke REST Node.js agar tetap memakai sumber data kanonis.</p>
+    </section>
+    <section class="card card-pad"><h3>Alur dan teknologi pada project ini</h3>
+      <ol class="report-list">
+        <li><b>REST:</b> browser → HTTP/JSON Node.js <code>:4173</code> → edge cache / gRPC internal <code>:8443</code> → JSON response.</li>
+        <li><b>RPC:</b> browser → endpoint pengujian gateway HTTP <code>:4173</code> → gRPC/HTTP/2 <code>:8443</code> → protobuf <code>GetReadings</code>.</li>
+        <li><b>RMI:</b> browser → gateway Node.js <code>:4173</code> → HTTP bridge Java lokal <code>:8765</code> → RMI registry <code>:1099</code> / object <code>:1100</code> → method Java → REST Node.js <code>:4173</code>.</li>
+      </ol>
+      <p>REST dan RPC ditulis dalam JavaScript/Node.js; service RMI, remote interface, implementasi, bridge, serta client CLI ditulis dalam Java 17+. RMI ports dapat diubah lewat environment variables. Port HTTP/gRPC mengikuti konfigurasi project.</p>
+      <p><b>Catatan:</b> RMI di browser tidak didukung langsung. Bridge HTTP menjadi adapter antarmuka, bukan pengganti RMI; layanan Java tetap melakukan pemanggilan remote method melalui registry.</p>
+    </section>
+    <section class="card card-pad"><h3>Hasil pengujian aktual</h3>
+      <p>${test ? `Pengujian terakhir pada ${esc(test.at)} memakai stasiun ${esc(test.stationId)}. ${test.consistent ? 'Ketiga respons identik.' : 'Respons belum seluruhnya identik atau ada metode gagal.'}` : 'Belum ada angka maupun hasil yang direkayasa. Buka Uji komunikasi dan jalankan tes untuk mengisi hasil.'}</p>
+      <div class="comparison-table-wrap"><table class="comparison-table">
+        <thead><tr><th>Metode</th><th>Status</th><th>Round-trip aktual</th><th>Hasil</th></tr></thead>
+        <tbody>${results}</tbody>
+      </table></div>
+      <p class="comparison-note">Waktu adalah sampel end-to-end dari browser, mencakup gateway, cache (REST), serta adapter dan panggilan REST upstream (RMI). Satu sampel tidak cukup untuk menyimpulkan performa protokol; lakukan banyak iterasi terkontrol dan bandingkan median/p95 untuk benchmark yang adil.</p>
+    </section>
+    <section class="card card-pad"><h3>Perbandingan karakteristik</h3>
+      <div class="comparison-table-wrap"><table class="comparison-table">
+        <thead><tr><th>Aspek</th><th>REST API</th><th>RPC / gRPC</th><th>RMI</th></tr></thead>
+        <tbody>
+          <tr><th>Kontrak</th><td>Resource, URI, HTTP verbs</td><td>Protobuf service/method</td><td>Java remote interface</td></tr>
+          <tr><th>Protokol</th><td>HTTP/1.1 (HTTPS opsional)</td><td>HTTP/2</td><td>JRMP (HTTP bridge untuk browser)</td></tr>
+          <tr><th>Payload / encoding</th><td>JSON</td><td>Protobuf biner</td><td>Objek Java terserialisasi via JRMP</td></tr>
+          <tr><th>Port lokal</th><td>4173</td><td>8443 (internal)</td><td>1099 registry, 1100 object, 8765 bridge</td></tr>
+          <tr><th>Kelebihan</th><td>Interoperabel, mudah diakses browser/tools</td><td>Kontrak kuat, efisien untuk service-to-service</td><td>Natural untuk aplikasi Java yang berbagi interface/tipe</td></tr>
+          <tr><th>Kekurangan</th><td>Overhead teks; cache/HTTP harus diperhitungkan</td><td>Perlu kontrak dan tooling; browser butuh gateway</td><td>Java-specific, konfigurasi registry/ports, browser butuh bridge</td></tr>
+          <tr><th>Kompleksitas pada ClimaGrid</th><td>Rendah; sudah menjadi API utama</td><td>Sedang; kontrak protobuf dan gRPC sudah tersedia</td><td>Tertinggi; service Java terpisah, bridge, registry, serta upstream REST</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+    <section class="card card-pad"><h3>Kesimpulan</h3>
+      <p>REST paling sesuai untuk integrasi browser dan akses lintas bahasa pada aplikasi ini. gRPC lebih sesuai untuk komunikasi internal Node.js yang sudah memakai kontrak protobuf. RMI berhasil ditambahkan sebagai pilihan interoperabilitas Java, tetapi bukan pengganti praktis bagi dua jalur tersebut pada frontend web; bridge dan upstream REST diperlukan untuk menjaga browser access serta konsistensi data. Pilihan “tercepat” tidak ditetapkan karena sampel end-to-end dan jalurnya berbeda.</p>
+    </section>
+  </div>`;
+}
+
 function stationGridHTML() {
   const q = state.query.toLowerCase().trim();
   let list = state.stationResults || STATIONS.filter(s => state.stationFilter === 'all' || s.status === state.stationFilter);
@@ -617,8 +711,14 @@ function stationGridHTML() {
 }
 
 /* ============================== router / render ============================== */
-const VIEWS = { dashboard: viewDashboard, map: viewMap, alerts: viewAlerts, stations: viewStations };
-const TITLES = { dashboard: 'Dashboard', map: 'Peta interpolasi', alerts: 'Peringatan', stations: 'Stasiun' };
+const VIEWS = {
+  dashboard: viewDashboard, map: viewMap, alerts: viewAlerts, stations: viewStations,
+  communications: viewCommunications, report: viewCommunicationReport
+};
+const TITLES = {
+  dashboard: 'Dashboard', map: 'Peta interpolasi', alerts: 'Peringatan', stations: 'Stasiun',
+  communications: 'Uji komunikasi', report: 'Laporan Perbandingan REST API, RPC, dan RMI'
+};
 let mapLeaseSource = null;
 let mapRequestSequence = 0;
 let alertRequestSequence = 0;
@@ -747,6 +847,11 @@ function closeSheet() {
 
 /* ============================== interactions ============================== */
 document.addEventListener('click', e => {
+  const communicationsTest = e.target.closest('[data-communications-test]');
+  if (communicationsTest) {
+    runCommunicationTest();
+    return;
+  }
   const stationEl = e.target.closest('[data-station]');
   if (stationEl && !e.target.closest('[data-action]')) {
     e.preventDefault();
@@ -789,11 +894,72 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('change', e => {
+  if (e.target.id === 'communicationStation') {
+    state.communicationsStation = e.target.value;
+    return;
+  }
   if (e.target.matches('[data-interp]')) {
     state.interp = e.target.checked;
     render();
   }
 });
+
+async function runCommunicationTest() {
+  if (state.communicationTestRunning) return;
+  state.communicationTestRunning = true;
+  render();
+  const stationId = state.communicationsStation;
+  const from = new Date(Date.now() - 24 * 3600000).toISOString();
+  const to = new Date().toISOString();
+  const query = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  const methods = [
+    { label: 'REST API', path: `/api/v1/stations/${encodeURIComponent(stationId)}/readings${query}` },
+    { label: 'RPC / gRPC', path: `/api/v1/rpc/stations/${encodeURIComponent(stationId)}/readings${query}` },
+    { label: 'RMI', path: `/api/v1/rmi/stations/${encodeURIComponent(stationId)}/readings${query}` }
+  ];
+
+  const results = await Promise.all(methods.map(async method => {
+    const started = performance.now();
+    try {
+      const response = await fetch(method.path, {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store'
+      });
+      const payload = await response.json();
+      const elapsedMs = performance.now() - started;
+      if (!response.ok) {
+        throw new Error(payload.error && payload.error.message || `HTTP ${response.status}`);
+      }
+      if (payload.station_id !== stationId || !Array.isArray(payload.readings)) {
+        throw new Error('Bentuk respons tidak sesuai kontrak pembacaan');
+      }
+      return {
+        label: method.label,
+        ok: true,
+        elapsedMs,
+        readingCount: payload.readings.length,
+        signature: JSON.stringify(payload)
+      };
+    } catch (error) {
+      return {
+        label: method.label,
+        ok: false,
+        elapsedMs: null,
+        readingCount: 0,
+        error: error.message,
+        signature: null
+      };
+    }
+  }));
+  state.communicationTest = {
+    stationId,
+    at: new Date().toLocaleString('id-ID'),
+    results,
+    consistent: results.every(result => result.ok && result.signature === results[0].signature)
+  };
+  state.communicationTestRunning = false;
+  render();
+}
 
 document.addEventListener('input', e => {
   if (e.target.id === 'stationSearch') {

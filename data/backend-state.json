@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "readings": {
     "SBY-01": [
       {
@@ -49,6 +50,112 @@
       }
     }
   },
+  "jobResults": {
+    "799e0be4-39c1-4a0d-872c-56616bd55846": {
+      "width": 95,
+      "height": 56,
+      "values_sha256": "5c47b4f83f1b47a7921a9c37d8ee0f543fedbde4b28ab6f02d965f1948782fcb"
+    }
+  },
+  "maps": {},
+  "alerts": {
+    "BWY-01:rain:2026-11-24T07:59": {
+      "id": "BWY-01:rain:2026-11-24T07:59",
+      "station_id": "BWY-01",
+      "area": "Banyuwangi",
+      "type": "rain",
+      "severity": "high",
+      "value": 52,
+      "detected_at": "2026-11-24T07:59:27.661Z",
+      "source": "seed",
+      "payload_sha256": "d794a4e641bdfa6663b0cd7cc06423645e3fe31aba19a3e635139762e3acfd3e",
+      "published_at": "2026-11-24T07:59:27.717Z"
+    },
+    "TBN-01:dry:2026-11-24T07:59": {
+      "id": "TBN-01:dry:2026-11-24T07:59",
+      "station_id": "TBN-01",
+      "area": "Tuban",
+      "type": "dry",
+      "severity": "medium",
+      "value": 39,
+      "detected_at": "2026-11-24T07:59:27.661Z",
+      "source": "seed",
+      "payload_sha256": "24c7bf8cf1ed29628e1faac61604ff536c9bd7b7fbb2d92d71aef97c552b80a8",
+      "published_at": "2026-11-24T07:59:27.740Z"
+    },
+    "SMP-01:wind:2026-11-24T07:59": {
+      "id": "SMP-01:wind:2026-11-24T07:59",
+      "station_id": "SMP-01",
+      "area": "Sumenep",
+      "type": "wind",
+      "severity": "high",
+      "value": 43,
+      "detected_at": "2026-11-24T07:59:27.661Z",
+      "source": "seed",
+      "payload_sha256": "03801f45514a7911d3b2284e408dbb2982f01a130c810b4909675622c13f6c6a",
+      "published_at": "2026-11-24T07:59:27.750Z"
+    },
+    "alerts:*": {
+      "detected_at": "2026-11-24T07:59:57.497Z",
+      "count": 3,
+      "alerts": [
+        {
+          "id": "BWY-01:rain:2026-11-24T07:59",
+          "station_id": "BWY-01",
+          "area": "Banyuwangi",
+          "type": "rain",
+          "severity": "high",
+          "value": 52,
+          "detected_at": "2026-11-24T07:59:57.497Z",
+          "source": "seed"
+        },
+        {
+          "id": "TBN-01:dry:2026-11-24T07:59",
+          "station_id": "TBN-01",
+          "area": "Tuban",
+          "type": "dry",
+          "severity": "medium",
+          "value": 39,
+          "detected_at": "2026-11-24T07:59:57.497Z",
+          "source": "seed"
+        },
+        {
+          "id": "SMP-01:wind:2026-11-24T07:59",
+          "station_id": "SMP-01",
+          "area": "Sumenep",
+          "type": "wind",
+          "severity": "high",
+          "value": 43,
+          "detected_at": "2026-11-24T07:59:57.497Z",
+          "source": "seed"
+        }
+      ]
+    }
+  },
+  "hourlyAggregates": {
+    "SBY-01:2026-11-24T03:00:00.000Z": {
+      "station_id": "SBY-01",
+      "bucket": "2026-11-24T03:00:00.000Z",
+      "count": 1,
+      "temp_avg": 30.5,
+      "temp_min": 30.5,
+      "temp_max": 30.5,
+      "temp_sum": 30.5,
+      "rh_avg": 70,
+      "rh_min": 70,
+      "rh_max": 70,
+      "rh_sum": 70,
+      "rain_avg": 1.2,
+      "rain_min": 1.2,
+      "rain_max": 1.2,
+      "rain_sum": 1.2,
+      "wind_avg": 12,
+      "wind_min": 12,
+      "wind_max": 12,
+      "wind_sum": 12
+    }
+  },
+  "dhtState": {},
   "duplicateCount": 6,
   "ingestedCount": 1
 }

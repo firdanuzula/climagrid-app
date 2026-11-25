@@ -52,6 +52,9 @@ function request(method, pathname, body, headers = {}) {
   assert.strictEqual(history.status, 200);
   assert.ok(history.body.readings.length >= 1);
   assert.strictEqual(history.body.readings[history.body.readings.length - 1].station_id, 'SBY-01');
+  const rpcHistory = await request('GET', '/api/v1/rpc/stations/SBY-01/readings');
+  assert.strictEqual(rpcHistory.status, 200);
+  assert.deepStrictEqual(rpcHistory.body, history.body);
 
   const jobKey = `test-job-${Date.now()}`;
   const job = await request('POST', '/api/v1/analytics/jobs', { type: 'stats', station_id: 'SBY-01' }, { 'Idempotency-Key': jobKey });
